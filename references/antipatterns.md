@@ -1,59 +1,59 @@
-# 안티패턴 카탈로그 (언어 중립 원형 + 스택 구현)
+# Anti-pattern catalog (language-neutral archetypes + stack implementation)
 
-각 원형은 3필드로 본다.
-- 탐지신호: 코드에서 무엇을 보면 의심하나.
-- 변환 레시피: 안전하게 어떻게 바꾸나.
-- return 함정: 이 변환이 return을 깨는 단골 지점.
-
----
-
-## 1. 읽기 N+1 (루프 안 단건 조회)
-- 탐지: 루프 body 안에 ID 단건 DB/캐시 조회. 호출 수가 입력 개수에 비례.
-- 변환: 루프 전에 ID를 모아 다건 조회 1회 → ID맵 색인 → 루프는 맵 lookup만.
-- return 함정: 다건 결과 순서가 입력 순서와 다를 수 있다. 원본 루프는 입력 순서를 보장하므로 입력 ID 순으로 재조립.
-- 스택: PHP=`IN(...)`+`array_column(rows,null,'Key')` / Node=DataLoader·Prisma `include` / Python=`prefetch_related`·`in_bulk` / Go=pgx batch·`= ANY($1)`.
-
-## 2. 쓰기 N+1 (루프마다 INSERT/UPDATE)
-- 탐지: 루프 안 execute/save.
-- 변환: 변경 대상을 배열에 누적하고 루프 종료 후 멀티-row INSERT [ON DUPLICATE KEY UPDATE / UPSERT]로 왕복 1회.
-- return 함정: upsert 의미가 단건과 동일한지(증분 vs 덮어쓰기). `col=VALUES(col)` + 시간컬럼 인라인으로 동치 보존.
-- 스택: PHP=multi-row VALUES / Node=`createMany` / Python=`bulk_create` / Go=`pgx.CopyFrom`.
-
-## 3. 중복 예외 → 제약으로 위임
-- 탐지: try-catch로 중복 INSERT 예외를 삼킴 (비싼 예외 흐름 + 경쟁조건).
-- 변환: `INSERT IGNORE` / `ON CONFLICT DO NOTHING` 으로 엔진이 처리, try-catch 제거.
-- return 함정: 잡던 예외의 다른 분기까지 사라지지 않는지 확인.
-
-## 4. 마스터/기획 데이터 반복 로드 → 메모이즈
-- 탐지: 같은 요청 안에서 안 변하는 마스터 데이터를 루프마다 재조회.
-- 변환: 요청 스코프 캐시(멤버 변수/맵)에 첫 조회 결과 저장, null 마커로 적중 판단.
-- return 함정: 캐시 키 순서가 민감한 캐시면 키 순서를 보존해야 한다.
-
-## 5. 루프 내 순수계산/다단계 룩업 호이스팅
-- 탐지: 루프마다 동일 입력으로 같은 순수함수·2단계 배열 룩업 재계산.
-- 변환: 루프 시작에서 1회만 로컬 변수로 호이스팅 (예: `$unitData = $unitDataList[$uid]`).
-- return 함정: 호이스팅 대상이 정말 루프 불변인지 확인 (반복마다 달라지는 값 섞임 금지).
-
-## 6. 무거운 의존성 반복 로드 → 지연 초기화
-- 탐지: 루프/객체별로 같은 라이브러리를 매번 load.
-- 변환: null 가드 지연 초기화 (`if (x === null) x = load()`).
-- return 함정: 없음(부수효과 라이브러리면 초기화 시점 차이 주의).
-
-## 7. 외부 API 응답(거의 안 변함) 매 요청 재요청 → 캐시
-- 탐지: 매 요청 외부 HTTP 왕복.
-- 변환: 응답 캐시(가능하면 Cache-Control max-age를 TTL로), 키 미스/회전 시에만 강제 갱신.
-- return 함정: TTL 만료 경계에서 값이 바뀌는 시점은 동작상 허용 범위인지 확인.
-
-## 8. 분기 후처리 중복 / 인스턴스별 기본값 재생성
-- 탐지: if/else 양쪽이 동일한 후처리 호출. count 루프마다 동일 기본값 재생성.
-- 변환: 분기에서는 입력만 확정하고 공통 후처리는 분기 밖 1회. 입력 의존 부분(baseUnitData)은 1회 생성, 인스턴스별 값(uuid 등)만 루프에서.
-- return 함정: 분기별 미묘한 차이를 공통화로 뭉개지 않는지.
+Each archetype has 3 fields.
+- Signal: what to look for in code to suspect it.
+- Transform: how to change it safely.
+- Return trap: where this transform commonly breaks the return.
 
 ---
 
-## 정렬·집합·float 고위험 함정 (return을 가장 잘 깬다)
-- **IN/batch 결과 순서**: 입력 순서와 다름. 원본 루프 순서 재현을 위해 입력 ID 순으로 재정렬(맵 색인 후 입력순 재조립).
-- **정렬 안정성**: PHP `usort`는 8.0+만 안정, 그 이전/일부 언어는 불안정 → 동순위 행 순서가 바뀜. 원본이 안정 정렬 의존이면 tie-breaker 키 명시.
-- **중복 제거 키 보존**: `array_unique`는 키 유지, set 변환은 순서/키를 잃을 수 있음. 재인덱스(`array_values`) 여부로 결과가 달라짐.
-- **부동소수 합산 순서**: batch 합산은 누적 순서가 바뀌면 마지막 비트가 달라질 수 있다. 정수 합산은 안전.
-- 이 4개는 byte-identical을 즉시 깬다. 변환 전후 정렬·순서를 반드시 검증한다.
+## 1. Read N+1 (single-row fetch inside a loop)
+- Signal: single-row DB/cache fetch by ID inside a loop body. Call count scales with input size.
+- Transform: collect IDs before the loop, fetch in one multi-row query → index into an ID map → loop does only map lookups.
+- Return trap: multi-row result order may differ from input order. The original loop preserves input order, so re-assemble in input-ID order.
+- Stack: PHP=`IN(...)`+`array_column(rows,null,'Key')` / Node=DataLoader·Prisma `include` / Python=`prefetch_related`·`in_bulk` / Go=pgx batch·`= ANY($1)`.
+
+## 2. Write N+1 (INSERT/UPDATE per loop iteration)
+- Signal: execute/save inside a loop.
+- Transform: accumulate targets into an array and after the loop do a multi-row INSERT [ON DUPLICATE KEY UPDATE / UPSERT], one round-trip.
+- Return trap: ensure upsert semantics match single-row (increment vs overwrite). `col=VALUES(col)` + inline time column preserves equivalence.
+- Stack: PHP=multi-row VALUES / Node=`createMany` / Python=`bulk_create` / Go=`pgx.CopyFrom`.
+
+## 3. Duplicate exception → delegate to a constraint
+- Signal: try-catch swallowing a duplicate INSERT exception (costly exception flow + race condition).
+- Transform: `INSERT IGNORE` / `ON CONFLICT DO NOTHING` lets the engine handle it; remove the try-catch.
+- Return trap: confirm other branches of the caught exception did not disappear too.
+
+## 4. Master/design-data re-loaded repeatedly → memoize
+- Signal: master data that never changes within a request is re-fetched every loop.
+- Transform: store the first fetch in a request-scope cache (member var/map); use a null marker to detect a hit.
+- Return trap: if the cache key is order-sensitive, the key order must be preserved.
+
+## 5. Hoist pure computation / multi-step lookup out of the loop
+- Signal: same pure function or 2-step array lookup re-computed every loop with the same input.
+- Transform: hoist into a local variable once at loop start (e.g. `$unitData = $unitDataList[$uid]`).
+- Return trap: confirm the hoisted target is truly loop-invariant (no per-iteration values mixed in).
+
+## 6. Heavy dependency re-loaded repeatedly → lazy init
+- Signal: same library loaded per loop/object.
+- Transform: null-guard lazy init (`if (x === null) x = load()`).
+- Return trap: none (for side-effecting libraries, mind the init timing difference).
+
+## 7. External API response (rarely changes) re-requested every request → cache
+- Signal: external HTTP round-trip every request.
+- Transform: cache the response (use Cache-Control max-age as TTL where possible); force refresh only on key miss/rotation.
+- Return trap: confirm the value change at TTL expiry is within acceptable behavior.
+
+## 8. Duplicate post-processing per branch / per-instance default re-creation
+- Signal: both if/else branches call the same post-processing. A default is re-created every count loop.
+- Transform: branches set only the input; do common post-processing once outside the branch. Build input-dependent parts (baseUnitData) once; only per-instance values (uuid etc.) in the loop.
+- Return trap: do not flatten subtle per-branch differences via the shared path.
+
+---
+
+## Sort/set/float high-risk traps (these break return most often)
+- **IN/batch result order**: differs from input. To reproduce the original loop order, re-sort in input-ID order (index by map, re-assemble in input order).
+- **Sort stability**: PHP `usort` is stable only on 8.0+, unstable on earlier/some languages → tie rows reorder. If the original relies on stable sort, name an explicit tie-breaker key.
+- **Dedup key preservation**: `array_unique` keeps keys; set conversion may lose order/keys. Result changes by whether you re-index (`array_values`).
+- **Float summation order**: batch summation may differ in the last bit if accumulation order changes. Integer summation is safe.
+- These 4 break byte-identical immediately. Always verify sort/order before and after the transform.

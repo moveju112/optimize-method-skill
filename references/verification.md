@@ -1,48 +1,48 @@
-# 검증 레시피 — return 동일성 (differential testing, 스택 중립)
+# Verification recipe — return identity (differential testing, stack-neutral)
 
-SKILL 4단계가 가리키는 단일 진실원천.
-수정 전후 return이 같은지 '추측'이 아니라 '캡처 후 diff'로 증명한다.
+The single source of truth that SKILL step 4 points to.
+Prove return is unchanged by "capture then diff", not by guessing.
 
-## 1. baseline 캡처 (수정 전에 반드시)
-- 후보표에서 확정한 케이스 ID 목록을 입력셋으로 쓴다 (4절 다방면 케이스를 커버).
-- 수정 코드를 넣기 **전**, 미수정 상태에서 각 케이스를 호출해 결과를 골든파일로 덤프한다.
-  - 경로: `<scratchpad>/golden/<method>__<caseId>.before.json`
-  - 캡처 단위는 클라이언트가 실제 받는 직렬화 경계(예: JSON-RPC `result`).
-- baseline은 수정 후엔 만들 수 없다. 캡처를 못 하면 SKILL '적용·롤백 게이트'의 UNPROVEN으로 간다.
-- 측정/재현 데이터가 없으면 baseline도 없다 → UNPROVEN.
+## 1. Baseline capture (mandatory, before the fix)
+- Use the case-ID list fixed in the candidate table as the input set (covers the §4 multi-angle cases).
+- **Before** inserting the fix, in the unmodified state, call each case and dump the result to a golden file.
+  - Path: `<scratchpad>/golden/<method>__<caseId>.before.json`
+  - Capture unit = the serialization boundary the client actually receives (e.g. JSON-RPC `result`).
+- Baseline cannot be made after the fix. If you cannot capture it, go to the SKILL "apply/rollback gate" UNPROVEN.
+- No measurement/repro data → no baseline → UNPROVEN.
 
-## 2. 수정 → after 캡처
-- 같은 입력셋으로 다시 호출해 `<method>__<caseId>.after.json` 덤프.
+## 2. Fix → after capture
+- Call again with the same input set and dump `<method>__<caseId>.after.json`.
 
-## 3. 비교 (동일성 정의)
-- 기본 게이트 = 직렬화 결과가 byte-identical 인가. 클라이언트가 받는 것이 이것이라 진실원천이다.
-- 정규화는 '비교 방법'이지 '허용오차 도입'이 아니다. 타입·키·개수는 무조건 동일.
-- 다르면 아래 표로 함정을 분류한다 (전부 '실패'로 간주, 그냥 넘기지 않는다).
+## 3. Compare (definition of identity)
+- Default gate = is the serialized result byte-identical. This is the truth because it is what the client receives.
+- Normalization is a "comparison method", not "introducing tolerance". Type/keys/count must be unconditionally identical.
+- If they differ, classify the trap with the table below (all count as "fail", do not let them pass).
 
-| 함정 | 증상 | 판정 |
-|------|------|------|
-| 연관배열 키 순서 | JSON object 키 순서가 바뀜 | 실패 (순서 보존) |
-| int/string 혼용 | `5` vs `"5"` | 실패 |
-| null vs 키 미존재 | `"k":null` vs 키 없음 | 실패 |
-| IN/batch 순서 | 결과가 입력 순서와 다름 | 실패 (입력순 재정렬 필요) |
-| float 정밀도 | 합산 순서 바뀌어 끝자리 다름 | 비결정 분기(4)로 |
+| Trap | Symptom | Verdict |
+|------|---------|---------|
+| Assoc-array key order | JSON object key order changed | fail (preserve order) |
+| int/string mix | `5` vs `"5"` | fail |
+| null vs missing key | `"k":null` vs no key | fail |
+| IN/batch order | result differs from input order | fail (re-sort in input order) |
+| float precision | summation order changed, last digit differs | go to non-deterministic branch (4) |
 
-- 비교 레벨을 명시한다: 직렬화 후 문자열 비교가 기본. PHP 배열 `===` 비교는 키 순서·타입에 민감하므로 보조로만.
+- State the comparison level: string comparison after serialization is the default. PHP array `===` comparison is sensitive to key order/type, so use it only as an aux.
 
-## 4. 비결정 출력 — raw diff 불가 시 (RNG·셔플·시간·float)
-- 가차/난수/시간값/부동소수 합산이 return에 직접 섞이면 byte diff 자체가 성립 안 한다.
-- 우선순위.
-  1. 시드 고정 가능 → 같은 시드(예: `mt_srand(고정값)`)에서 before==after raw diff (권장).
-  2. 불가 → 불변식 검증으로 전환 — 개수·키 집합·타입·정렬된 값 분포·합계·확률표가 보존되는가.
-  3. RNG/시간 소스 자체를 안 건드렸음을 코드로 증명 (예: 비용계산만 batch화, 추첨 로직 무수정).
-- 난수·시간 소스를 바꾸는 최적화는 금지 (동작 변경).
-- 이 경우 후보표 return영향은 '없음'이 아니라 '비결정(불변식 보존, raw diff 불가)'으로 적는다.
+## 4. Non-deterministic output — when raw diff is impossible (RNG·shuffle·time·float)
+- If gacha/random/time values/float summation feed the return directly, byte diff itself does not hold.
+- Priority.
+  1. Seed can be fixed → raw diff before==after under the same seed (e.g. `mt_srand(고정값)`) (recommended).
+  2. Not possible → switch to invariant checks — is count·key set·type·sorted value distribution·sum·probability table preserved.
+  3. Prove in code that the RNG/time source itself was untouched (e.g. only cost calc was batched, the draw logic is unchanged).
+- Optimizations that change the RNG/time source are forbidden (behavior change).
+- In this case the candidate table "return 영향" column is not "없음" but "non-deterministic (invariant preserved, raw diff impossible)".
 
-## 5. 다방면 케이스 (요구사항 그대로 — 각 케이스 before==after로 닫는다)
-- 정상 (대표 입력 여러 개).
-- 경계 (0·1·대량, 최소/최대, 첫·마지막 요소).
-- 빈값/없음 (빈 배열·null·미존재 ID·결과 0건).
-- 정렬·키·개수 (순서·키·개수가 그대로인가, 정렬 안정성).
-- 상태 다양화 (캐시 hit/miss, 신규/기존 유저, 권한/조건 분기).
-- 반복 호출 (캐시·batch 전환 시 누락·오염 없는가).
-- 비결정 메서드는 위 각도를 '시드 고정 후 동일성' 또는 '분포·개수·키집합 동일'로 판정. 비교 불가 각도는 N/A + 사유.
+## 5. Multi-angle cases (as required — close each with before==after)
+- Normal (several representative inputs).
+- Boundary (0·1·bulk, min/max, first·last element).
+- Empty/none (empty array·null·missing ID·0 results).
+- Sort·keys·count (order·keys·count unchanged, sort stability).
+- State variety (cache hit/miss, new/existing user, permission/condition branch).
+- Repeated calls (no omission·contamination on cache/batch switch).
+- For non-deterministic methods, judge each angle by "identity under fixed seed" or "distribution·count·key-set identical". Angles that cannot be compared get N/A + reason.

@@ -1,60 +1,61 @@
 # optimize-method
 
-느린 메서드·쿼리를 **동작은 그대로 두고 속도만** 개선하는 Claude Code 스킬.
+A Claude Code skill that makes a slow method/query faster **while keeping behavior identical**.
 
-> ⛔ 최상위 철칙: 최종 return 값은 byte 단위로 동일해야 한다.
-> 같은 입력 → 수정 전후 return 100% 일치 (값·타입·키·순서·개수).
-> 1비트라도 다르면 적용하지 않고 보고한다.
+> ⛔ Top rule: the final return value MUST stay byte-identical.
+> Same input → return is 100% identical before and after (value·type·keys·order·count).
+> If even 1 bit differs, do not apply — report instead.
 
-## 무엇을 하나
+## What it does
 
-- "X 속도 개선", "느린 메소드 최적화", "N+1 제거", "쿼리 줄여줘" 같은 요청에 발동.
-- 측정 → 원인분류 → 수정 → 검증 4단계로 진행.
-- 고치기 **전에** 느린 후보를 표로 보고하고 사용자 선택을 받는다.
-- 고친 **후에** 여러 각도(정상/경계/빈값/정렬/상태/반복)로 return 동일성을 검증한다.
+- Fires on requests like "X 속도 개선", "느린 메소드 최적화", "N+1 제거", "쿼리 줄여줘".
+- Runs 4 steps: measure → classify cause → fix → verify.
+- **Before** fixing, reports slow candidates as a table and gets the user's selection.
+- **After** fixing, verifies return identity from many angles (normal/boundary/empty/sort/state/repeat).
+- Skill instructions are in English (token-efficient); user-facing output stays Korean.
 
-## 설치
+## Install
 
-이 repo를 Claude Code 스킬 디렉토리에 클론한다.
+Clone this repo into the Claude Code skills directory.
 
 ```bash
 git clone https://github.com/moveju112/optimize-method-skill.git \
   ~/.claude/skills/optimize-method
 ```
 
-`~/.claude/skills/optimize-method/SKILL.md` 가 인식되면 끝.
+Done once `~/.claude/skills/optimize-method/SKILL.md` is recognized.
 
-## 구조 (2계층)
+## Structure (2 layers)
 
-절차(범용)와 지식(프로젝트별)을 분리한다.
+Process (generic) and knowledge (per-project) are split.
 
-| 계층 | 위치 | 역할 |
-|------|------|------|
-| 절차 | `SKILL.md` + `references/` | 모든 프로젝트 공통 |
-| 지식 | 프로젝트의 `docs/OPTIMIZATION.md` | 그 프로젝트 측정·안티패턴·검증 |
+| Layer | Location | Role |
+|-------|----------|------|
+| Process | `SKILL.md` + `references/` | shared across all projects |
+| Knowledge | the project's `docs/OPTIMIZATION.md` | that project's measure/anti-pattern/verify |
 
-프로젝트에 프로파일이 없으면 manifest로 스택을 자동 감지해
-`references/stacks/<stack>.md` (php-mysql / node / python / go / sql / frontend)로 fallback 한다.
+If a project has no profile, it auto-detects the stack from the manifest and falls back to
+`references/stacks/<stack>.md` (php-mysql / node / python / go / sql / frontend).
 
-새 프로젝트는 `references/profile-template.md` 를 `docs/OPTIMIZATION.md` 로 복사해 채우면 된다.
+For a new project, copy `references/profile-template.md` to `docs/OPTIMIZATION.md` and fill it in.
 
-## 파일
+## Files
 
 ```
-SKILL.md                          슬림 오케스트레이터 (트리거·철칙·4단계·게이트)
+SKILL.md                          slim orchestrator (triggers·top rule·4 steps·gate)
 references/
-  antipatterns.md                 안티패턴 원형 8종 + 스택별 구현 + 정렬·순서·float 함정
-  verification.md                 baseline 캡처·동일성 비교·비결정 분기·다방면 케이스
-  reporting.md                    후보표(6컬럼)·선택 게이트·우선순위·검증 매트릭스
-  profile-template.md             새 프로젝트 프로파일 빈 양식
+  antipatterns.md                 8 anti-pattern archetypes + per-stack impl + sort·order·float traps
+  verification.md                 baseline capture·identity compare·non-deterministic branch·multi-angle cases
+  reporting.md                    candidate table (6 cols)·selection gate·priority·verification matrix
+  profile-template.md             blank profile form for a new project
   stacks/
-    _matrix.md                    스택 × 측정도구 매핑표
+    _matrix.md                    stack × measurement-tool map
     php-mysql.md  node.md  python.md  go.md  sql.md  frontend.md
 ```
 
-## 검증 원칙
+## Verification principle
 
-- 수정 **전에** baseline을 먼저 캡처한다 (수정 후엔 만들 수 없다).
-- 수정 → 동일 입력 재호출 → 정규화 후 diff.
-- 판정 3분기: PASS(적용) / FAIL(해당 변경만 revert) / UNPROVEN(재현 불가 → 사람 검증 필요).
-- 커밋은 사용자가 직접 한다 (스킬은 자동 커밋하지 않는다).
+- Capture the baseline **before** the fix (it cannot be made afterward).
+- Fix → re-call with the same inputs → diff after normalization.
+- 3-way verdict: PASS (apply) / FAIL (revert only that change) / UNPROVEN (no repro → human verification needed).
+- The user commits (the skill never auto-commits).

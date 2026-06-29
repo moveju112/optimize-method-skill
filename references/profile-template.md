@@ -1,30 +1,30 @@
-# OPTIMIZATION — <프로젝트명> 최적화 프로파일
+# OPTIMIZATION — <project> optimization profile
 
-`optimize-method` 스킬이 읽는 프로젝트 전용 지식.
-절차는 스킬에, 프로젝트 고유 지식은 여기에 (2계층 분리).
-이 파일을 `docs/OPTIMIZATION.md` 로 복사해 빈칸을 채운다.
+Project-specific knowledge that the `optimize-method` skill reads.
+Process lives in the skill; project-specific knowledge lives here (2-layer split).
+Copy this file to `docs/OPTIMIZATION.md` and fill in the blanks.
 
-스택 자동감지 결과: <스택>  (manifest: <파일>)
+Stack auto-detect result: <stack>  (manifest: <file>)
 
-## 1. 측정 방법
-- 쿼리·IO 계획: <엔진/명령, 예: PG `EXPLAIN ANALYZE` / MySQL `EXPLAIN`>
-- 타이밍·프로파일러: <예: cProfile / clinic / pprof / 요청 로그>
-- 정적·N+1 탐지: <예: ORM 쿼리 로그, lint 규칙, 루프 내 호출 grep>
+## 1. Measurement methods
+- Query/IO plan: <engine/command, e.g. PG `EXPLAIN ANALYZE` / MySQL `EXPLAIN`>
+- Timing/profiler: <e.g. cProfile / clinic / pprof / request log>
+- Static/N+1 detection: <e.g. ORM query log, lint rule, grep for in-loop calls>
 
-## 2. 안티패턴 (이 프로젝트 고유)
-- <루프 내 데이터 접근 → 어떤 batch 메서드로>
-- <캐시 계층 / 마스터 데이터 위치>
-- <DB/커넥션 분리 규칙이 있으면 (예: 게임DB/계정DB)>
-- <데이터 접근 계층 규칙: 어디서 쿼리하나 (Model/Repository 경유 등)>
+## 2. Anti-patterns (project-specific)
+- <in-loop data access → which batch method>
+- <cache layer / master-data location>
+- <DB/connection split rule if any (e.g. game DB / account DB)>
+- <data-access layer rule: where queries happen (via Model/Repository etc.)>
 
-## 3. 수정 규칙
-- <코딩 규칙 문서 경로>
-- <DB 접근 계층 규칙>
-- <기존 메서드 시그니처 보존 정책 (삭제 금지, 버전 추가 등)>
+## 3. Fix rules
+- <coding rules doc path>
+- <DB access layer rule>
+- <existing method signature preservation policy (no delete, add a version, etc.)>
 
-## 4. 검증 방법
-- return diff 수단: <직렬화 비교 / 골든파일 / 응답 대조>
-- baseline 캡처 방법: <수정 전 어떻게 호출해 결과를 뽑나>
-- 상태 다양화 항목: <캐시 hit·miss, 권한 분기, 신규/기존 등>
-- 비결정 출력 판정: <RNG/시간값 있으면 시드 고정 또는 분포 비교 기준>
-- 커밋은 사용자가 직접 (자동 커밋 금지).
+## 4. Verification methods
+- return diff means: <serialization comparison / golden file / response compare>
+- baseline capture method: <how to call before the fix to dump results>
+- state-variety items: <cache hit·miss, permission branch, new/existing, etc.>
+- non-deterministic output judgment: <if RNG/time values exist, fixed-seed or distribution comparison criteria>
+- The user commits (no auto-commit).

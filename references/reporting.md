@@ -1,60 +1,60 @@
-# 보고 형식 — 후보표 / 선택 / 검증 매트릭스 / 수정 후 추적
+# Report format — candidate table / selection / verification matrix / post-fix tracking
 
-## 후보표 (수정 전, 사용자에게 먼저 제시)
-느린 것을 찾으면 **수정하기 전에** 표로 보고하고 사용자 선택을 받는다.
-맨 앞 `ID`는 추적용 보조 컬럼이다.
-요구된 6컬럼(대상 / 느린 이유 / 변경 추천 방향 / 코드 수정 범위 / 예상 속도 향상 / return 영향)은 글자 그대로 유지한다.
+## Candidate table (before the fix, present to the user first)
+When you find slow spots, **before fixing** report them as a table and get the user's selection.
+The leading `ID` is an auxiliary tracking column.
+The required 6 columns (대상 / 느린 이유 / 변경 추천 방향 / 코드 수정 범위 / 예상 속도 향상 / return 영향) are kept verbatim.
 
 | ID | 대상 | 느린 이유 | 변경 추천 방향 | 코드 수정 범위 | 예상 속도 향상 | return 영향 |
 |----|------|-----------|----------------|----------------|----------------|-------------|
-| C1 | 파일:줄 / 메서드 | 병목 근거 (예: 루프 N+1, 풀스캔) | 안티패턴 분류 + 수정안 1줄 | 소/중/대 + 줄 수 | 확정분 \| est.추정분 | 없음 |
+| C1 | file:line / method | bottleneck evidence (e.g. loop N+1, full scan) | anti-pattern class + 1-line fix | 소/중/대 + line count | 확정분 \| est.추정분 | 없음 |
 
-표 작성 규칙.
-- **ID**: C1, C2 … 순번. 선택·수정·검증·보고 전 단계를 이 ID로 1:1 추적한다.
-- **대상**: 파일:줄 / 메서드.
-- **느린 이유**: 측정 근거 기반. 측정 미실행이면 `(정적 추정, 측정 미실행)` 표기.
-- **변경 추천 방향**: 안티패턴 분류 + 구체적 수정안 1줄.
-- **코드 수정 범위**: 소(한 메서드 내) / 중(Model 메서드 추가) / 대(여러 파일·시그니처) + 대략 줄 수.
-- **예상 속도 향상**: 항상 `확정분 | est.추정분` 2토막.
-  - 확정분 = 코드로 단정 가능 (예: `DB왕복 12→1`, `쿼리 N→1`).
-  - 추정분 = 시간 %·배수는 반드시 `est.` 접두 (예: `est. ~70%↓`). 측정 불가면 `측정 필요`.
-- **return 영향**: 기본 `없음`. `있음`/`불확실`은 위험 후보. `비결정`은 RNG·shuffle·시간값 포함 메서드.
-- **정렬**: 우선순위점수 내림차순.
-  - 점수 = (효과 ×3) − (범위 ×2) − (위험 ×5).
-  - 효과: 큼(N→1·70%↓↑)=3 / 중=2 / 소=1.
-  - 범위: 소=1 / 중=2 / 대=3.
-  - 위험: 없음=0 / 비결정=1 / 불확실=1 / 있음=2.
-  - 효과 크고·범위 작고·안전한 후보가 위로 온다. 점수는 표에 안 넣어도 되나 정렬 근거로 쓴다.
+Table rules.
+- **ID**: C1, C2 … sequence. Track all stages (select·fix·verify·report) 1:1 by this ID.
+- **대상**: file:line / method.
+- **느린 이유**: evidence-based. If not measured, mark `(정적 추정, 측정 미실행)`.
+- **변경 추천 방향**: anti-pattern class + concrete 1-line fix.
+- **코드 수정 범위**: 소 (within one method) / 중 (add a Model method) / 대 (multiple files·signature) + rough line count.
+- **예상 속도 향상**: always 2 parts `확정분 | est.추정분`.
+  - fixed = assertable in code (e.g. `DB왕복 12→1`, `쿼리 N→1`).
+  - estimate = time %·multiple must be prefixed `est.` (e.g. `est. ~70%↓`). If unmeasurable, `측정 필요`.
+- **return 영향**: default `없음`. `있음`/`불확실` are risk candidates. `비결정` for methods with RNG·shuffle·time values.
+- **Sort**: descending by priority score.
+  - score = (impact ×3) − (scope ×2) − (risk ×5).
+  - impact: big (N→1·70%↓+)=3 / mid=2 / small=1.
+  - scope: 소=1 / 중=2 / 대=3.
+  - risk: 없음=0 / 비결정=1 / 불확실=1 / 있음=2.
+  - High-impact·small-scope·safe candidates rise to the top. The score need not be in the table but is the sort basis.
 
-## 후보 선택 받기 (게이트)
-- 후보표 바로 뒤에 한 줄 질의를 **반드시** 출력한다.
-  - 예: `어떤 후보를 진행할까요? (예: C1,C2 / 전체 / 위험제외 / 보류:C4)`
-- 사용자가 ID를 고르기 전에는 **편집 금지** (측정 없는 수정 금지와 동급 게이트).
-- `전체`는 return 영향이 `없음`/`비결정`인 후보만 포함한다.
-- `있음`/`불확실` 후보는 사용자가 그 ID를 **명시적으로 지정**해야만 진행한다.
+## Getting candidate selection (gate)
+- Right after the candidate table, **always** output a one-line query.
+  - e.g. `어떤 후보를 진행할까요? (예: C1,C2 / 전체 / 위험제외 / 보류:C4)`
+- Do NOT edit before the user picks an ID (gate equal to "no fix without measurement").
+- `전체` includes only candidates whose return impact is `없음`/`비결정`.
+- `있음`/`불확실` candidates proceed only if the user **explicitly** names that ID.
 
-## 검증 매트릭스 (4단계 산출물)
-행 = 선택된 후보ID, 열 = 6각도. 셀 = PASS/FAIL/N/A.
+## Verification matrix (step 4 output)
+Rows = selected candidate IDs, columns = the 6 angles. Cells = PASS/FAIL/N/A.
 
-| ID | 정상 | 경계 | 빈값 | 정렬·키·개수 | 상태다양화 | 반복호출 |
-|----|------|------|------|--------------|------------|----------|
+| ID | normal | boundary | empty | sort·keys·count | state-variety | repeated |
+|----|--------|----------|-------|-----------------|---------------|----------|
 | C1 | PASS | PASS | PASS | PASS | PASS | PASS |
 
-- 한 셀이라도 FAIL → 그 ID는 적용 안 함, 해당 변경만 revert, 수정 후 표에 '롤백'으로 기록.
-- 비결정 메서드는 값 비트동일 대신 `시드 고정 후 동일성` 또는 `분포·개수·키집합 동일`로 판정. 비교 불가 각도는 N/A + 사유.
+- Any one cell FAIL → that ID is not applied, revert only that change, record as 'rollback' in the post-fix table.
+- Non-deterministic methods judge by `시드 고정 후 동일성` or `분포·개수·키집합 동일` instead of bit-identical values. Non-comparable angles get N/A + reason.
 
-## 수정 후 보고 — before→after 추적표
-선택된 모든 ID가 한 행씩 등장한다 (보류·롤백도 사유와 함께). 누락이 시각적으로 드러난다.
+## Post-fix report — before→after tracking table
+Every selected ID appears as one row (including held/rolled-back with reasons). Omissions become visually obvious.
 
 | ID | 적용여부 | 수정 위치 | 속도 before→after | return 동일성 | 비고 |
 |----|----------|-----------|-------------------|---------------|------|
-| C1 | 적용 | 파일:줄 | 확정분 실측 + (est. 적중?) | 6/6 PASS | — |
-| C4 | 롤백 | — | — | 정렬 FAIL | 동순위 순서 변동 |
+| C1 | 적용 | file:line | fixed measured + (est. hit?) | 6/6 PASS | — |
+| C4 | 롤백 | — | — | sort FAIL | tie order changed |
 
-- 속도: 확정분(쿼리/왕복 수)은 실측값, 추정분(시간%)은 '예상 대비 실제' 적중 여부 병기.
-- 확정값과 추정값을 섞어 쓰지 않는다.
-- 추정이 크게 빗나가면(예: 인덱스 추가했는데 옵티마이저 미사용) 재측정 사유를 비고에 남기고 '효과 없음 → 롤백 권고'.
+- Speed: fixed (query/round-trip count) is the measured value, estimate (time %) is annotated 'predicted vs actual' hit/miss.
+- Do not mix fixed and estimated values.
+- If the estimate is badly off (e.g. added index but optimizer did not use it), note the re-measure reason in 비고 and 'no effect → recommend rollback'.
 
-## 진행 현황 (수정 중 매 턴 갱신, 한 줄)
+## Progress (update every turn during the fix, one line)
 - `C1 검증완료 / C2 수정중 / C3 보류(사용자) / C4 롤백(정렬 FAIL)`
-- 한 후보 = 한 상태. 마침표 줄바꿈 규칙과 정합.
+- One candidate = one state. Consistent with the period=newline rule.
