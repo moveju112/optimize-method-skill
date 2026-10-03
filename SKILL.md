@@ -1,6 +1,7 @@
 ---
 name: optimize-method
-version: "2.0.0"
+metadata:
+  version: "2.1.0"
 description: Use when optimizing a slow method/function/query for speed — triggered by "X 속도 개선", "느린 메소드 최적화", "성능 개선", "이거 왜 느려", "최적화해줘", "N+1 제거", "쿼리 줄여줘", "루프 안 쿼리", "벌크로 묶어", "캐시 적용해서 빠르게", or any request to make existing code faster without changing its behavior. ⛔ Return value MUST stay byte-identical. Project-agnostic 4 steps (measure→classify→fix→verify); reads project-local profile if present, else auto-detects stack. Not this skill if behavior/spec changes. Log analysis only → request-log-tracer.
 ---
 
@@ -61,18 +62,20 @@ Respond to the user in Korean (skill output stays Korean).
 - **Read and follow** `references/verification.md` exactly for the procedure and comparison criteria.
 - Core skeleton:
   - Capture the baseline **before** the fix (save it). Baseline cannot be made after the fix.
-  - Fix → re-call with the same inputs → diff after normalization.
+  - Fix → re-call with the same inputs and controlled state → compare the original serialized bytes.
   - Multi-angle cases: normal / boundary (0·1·bulk, first·last) / empty (empty array·null·missing ID) / sort·keys·count / state (cache hit·miss, new·existing) / repeated calls.
 - If even one case's return differs, do not apply (rule applies).
-- For non-deterministic output (RNG·shuffle·time·float), switch from raw diff to invariant checks (`references/verification.md`).
+- For non-deterministic output, first control RNG/time in the test harness. Invariant checks alone are weaker evidence and never PASS the identity gate (`references/verification.md`).
 - Output: a candidate-ID × 6-angle verification matrix (`references/reporting.md`).
 
 ## Apply/rollback gate
-- 3-way verdict.
-  - PASS (all cases byte-identical or invariant preserved) → keep applied.
-  - FAIL (any case diffs) → revert only that change with `git checkout -- <file>`, then report.
-  - UNPROVEN (no repro data/access to capture baseline) → do NOT apply code, state "human verification needed", report.
-- If only some of several candidates FAIL, revert only the FAIL candidates individually (pre-commit, so identify by hunk via `git diff`).
+- 4-way verdict; PASS means identity observed for the listed cases, not proof for every possible input.
+  - PASS (all required cases byte-identical under the same inputs/state) → keep applied.
+  - FAIL (any controlled case differs, including float rounding) → undo only the candidate's task-owned edits, then report.
+  - INVARIANTS_ONLY (raw comparison impossible; invariants passed) → identity remains unproven; do NOT retain the optimization as verified.
+  - UNPROVEN (baseline or required comparison evidence missing, including no completed invariant check) → do NOT retain the optimization; state the missing evidence and report.
+- For FAIL/INVARIANTS_ONLY/UNPROVEN, restore only task-owned hunks after reviewing `git diff`; preserve all pre-existing edits. Never restore an entire file that also contains other work.
+- Capturing controlled baseline evidence can resume this task. Accepting changed behavior requires a separate behavior-change task, not an identity PASS here.
 - Revert is a working-tree operation. The user commits (no auto-commit).
 
 ## Report format

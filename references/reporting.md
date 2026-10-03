@@ -34,14 +34,15 @@ Table rules.
 - `있음`/`불확실` candidates proceed only if the user **explicitly** names that ID.
 
 ## Verification matrix (step 4 output)
-Rows = selected candidate IDs, columns = the 6 angles. Cells = PASS/FAIL/N/A.
+Rows = selected candidate IDs, columns = the 6 angles. Cells = PASS/FAIL/INVARIANTS_ONLY/UNPROVEN/N/A.
 
 | ID | normal | boundary | empty | sort·keys·count | state-variety | repeated |
 |----|--------|----------|-------|-----------------|---------------|----------|
 | C1 | PASS | PASS | PASS | PASS | PASS | PASS |
 
 - Any one cell FAIL → that ID is not applied, revert only that change, record as 'rollback' in the post-fix table.
-- Non-deterministic methods judge by `시드 고정 후 동일성` or `분포·개수·키집합 동일` instead of bit-identical values. Non-comparable angles get N/A + reason.
+- Non-deterministic methods PASS only after controlled before/after byte comparison. Invariant-only evidence is INVARIANTS_ONLY; missing required evidence is UNPROVEN. N/A is only for an inapplicable angle.
+- Candidate verdict: any FAIL → FAIL; otherwise any UNPROVEN → UNPROVEN; otherwise any INVARIANTS_ONLY → INVARIANTS_ONLY; only all applicable angles PASS → PASS. No applicable/observed comparison → UNPROVEN.
 
 ## Post-fix report — before→after tracking table
 Every selected ID appears as one row (including held/rolled-back with reasons). Omissions become visually obvious.
@@ -50,9 +51,11 @@ Every selected ID appears as one row (including held/rolled-back with reasons). 
 |----|----------|-----------|-------------------|---------------|------|
 | C1 | 적용 | file:line | fixed measured + (est. hit?) | 6/6 PASS | — |
 | C4 | 롤백 | — | — | sort FAIL | tie order changed |
+| C5 | 보류 | — | 측정 미실행 | INVARIANTS_ONLY | random control unavailable; identity not proven |
 
 - Speed: fixed (query/round-trip count) is the measured value, estimate (time %) is annotated 'predicted vs actual' hit/miss.
 - Do not mix fixed and estimated values.
+- Include comparison boundary, baseline/after evidence paths, controlled seed/time/state, executed cases, and verdict. Never equate invariants with byte identity.
 - If the estimate is badly off (e.g. added index but optimizer did not use it), note the re-measure reason in 비고 and 'no effect → recommend rollback'.
 
 ## Progress (update every turn during the fix, one line)

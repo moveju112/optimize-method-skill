@@ -56,6 +56,7 @@ references/
 ## Verification principle
 
 - Capture the baseline **before** the fix (it cannot be made afterward).
-- Fix → re-call with the same inputs → diff after normalization.
-- 3-way verdict: PASS (apply) / FAIL (revert only that change) / UNPROVEN (no repro → human verification needed).
+- Fix → re-call with the same inputs and controlled state → compare original serialized bytes.
+- 4-way verdict: PASS (tested cases byte-identical) / FAIL (controlled difference) / INVARIANTS_ONLY (baseline and completed invariant checks only) / UNPROVEN (missing baseline/required comparison evidence).
+- Only PASS retains the optimization. Invariant-only checks never prove identity; deterministic float rounding differences fail. Restore only task-owned edits and preserve other work.
 - The user commits (the skill never auto-commits).
